@@ -1,0 +1,54 @@
+﻿#pragma kernel Init
+#pragma kernel AddWave
+#pragma kernel VelocityUpdate
+#pragma kernel PositionUpdate
+
+RWTexture2D<float2> Result;
+
+float ss;
+float a;
+float deltaTime;
+float2 position;
+float radius;
+
+
+float Laplace(int2 id : SV_DispatchThreadID) {
+	float width, height;
+	Result.GetDimensions(width, height);
+	float a = -4 * Result[id].r +
+				(id.x != 0 ? Result[id + int2(-1, 0)].r : 0) +
+				(id.x < width - 1 ? Result[id + int2(1, 0)].r : 0) +
+				(id.y != 0 ? Result[id + int2(0, -1)].r : 0) +
+				(id.y < height - 1 ? Result[id + int2(0, 1)].r : 0);
+	return a;
+}
+
+[numthreads(8, 8, 1)]
+void Init(uint2 id : SV_DispatchThreadID) {
+	Result[id] = float2(0, 0);
+}
+
+[numthreads(8, 8, 1)]
+void AddWave(uint2 id : SV_DispatchThreadID) {
+	float2 p = position - id;
+	float2 tmp = Result[id];
+	if (p.x * p.x + p.y * p.y <= pow(radius, 2)) {
+		tmp.r = (1 + sin(0.5 * sqrt(p.x * p.x + p.y * p.y))) / 2;
+		Result[id] = tmp;
+	}
+}
+
+[numthreads(8, 8, 1)]
+void VelocityUpdate(uint2 id : SV_DispatchThreadID) {
+	float2 tmp = Result[id];
+	float accel = Laplace(id) * ss;
+	tmp.g = (tmp.g + accel * deltaTime) * a;
+	Result[id] = tmp;
+}
+
+[numthreads(8, 8, 1)]
+void PositionUpdate(uint2 id : SV_DispatchThreadID) {
+	float2 tmp = Result[id];
+	tmp.r = tmp.r + tmp.g * deltaTime;
+	Result[id] = tmp;
+}
